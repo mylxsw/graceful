@@ -17,6 +17,8 @@ type Graceful struct {
 
 	perHandlerTimeout time.Duration
 
+	signalChan chan os.Signal
+
 	reloadHandlers   []func()
 	shutdownHandlers []func()
 }
@@ -28,6 +30,7 @@ func New(reloadSignals []os.Signal, shutdownSignals []os.Signal, perHandlerTimeo
 		reloadHandlers:    make([]func(), 0),
 		shutdownHandlers:  make([]func(), 0),
 		perHandlerTimeout: perHandlerTimeout,
+		signalChan:        make(chan os.Signal),
 	}
 }
 
@@ -53,18 +56,12 @@ func (gf *Graceful) Reload() {
 func (gf *Graceful) Shutdown() {
 	log.Debug("shutdown...")
 
-	if err := gf.SignalSelf(os.Interrupt); err != nil {
-		log.Errorf("shutdown failed: %s", err)
-	}
+	_ = gf.SignalSelf(os.Interrupt)
 }
 
 func (gf *Graceful) SignalSelf(sig os.Signal) error {
-	p, err := os.FindProcess(os.Getpid())
-	if err != nil {
-		return err
-	}
-
-	return p.Signal(sig)
+	gf.signalChan <- sig
+	return nil
 }
 
 func (gf *Graceful) shutdown() {
@@ -120,16 +117,13 @@ func (gf *Graceful) reload() {
 }
 
 func (gf *Graceful) Start() error {
-	// 平滑退出
-	signalChan := make(chan os.Signal)
-
 	signals := make([]os.Signal, 0)
 	signals = append(signals, gf.reloadSignals...)
 	signals = append(signals, gf.shutdownSignals...)
 
-	signal.Notify(signalChan, signals...)
+	signal.Notify(gf.signalChan, signals...)
 	for {
-		sig := <-signalChan
+		sig := <-gf.signalChan
 
 		for _, s := range gf.shutdownSignals {
 			if s == sig {

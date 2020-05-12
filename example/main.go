@@ -9,13 +9,16 @@ import (
 
 type Service struct {
 	stop chan interface{}
+	gf   *graceful.Graceful
 }
 
-func (s *Service) Init() {
+func (s *Service) Init(gf *graceful.Graceful) {
 	s.stop = make(chan interface{}, 0)
+	s.gf = gf
 }
 
 func (s *Service) Start() {
+	startTs := time.Now()
 	for {
 		select {
 		case <-s.stop:
@@ -23,6 +26,9 @@ func (s *Service) Start() {
 		default:
 			log.Debug("Hello, world")
 			time.Sleep(1 * time.Second)
+			if time.Now().Sub(startTs) > 5*time.Second {
+				s.gf.Shutdown()
+			}
 		}
 	}
 }
@@ -36,7 +42,7 @@ func main() {
 	gf := graceful.NewWithDefault(3 * time.Second)
 
 	s := &Service{}
-	s.Init()
+	s.Init(gf)
 
 	gf.AddShutdownHandler(s.Stop)
 	go s.Start()
