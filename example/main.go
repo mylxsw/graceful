@@ -9,10 +9,10 @@ import (
 
 type Service struct {
 	stop chan interface{}
-	gf   *graceful.Graceful
+	gf   graceful.Graceful
 }
 
-func (s *Service) Init(gf *graceful.Graceful) {
+func (s *Service) Init(gf graceful.Graceful) {
 	s.stop = make(chan interface{}, 0)
 	s.gf = gf
 }
@@ -34,7 +34,7 @@ func (s *Service) Start() {
 }
 
 func (s *Service) Stop() {
-	time.Sleep(5 * time.Second)
+	//time.Sleep(5 * time.Second)
 	s.stop <- struct{}{}
 }
 

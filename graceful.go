@@ -9,7 +9,17 @@ import (
 	"github.com/mylxsw/asteria/log"
 )
 
-type Graceful struct {
+type Graceful interface {
+	AddReloadHandler(h func())
+	AddShutdownHandler(h func())
+	Reload()
+	Shutdown()
+	Start() error
+}
+
+type SignalHandler func(signalChan chan os.Signal, signals []os.Signal)
+
+type gracefulImpl struct {
 	lock sync.Mutex
 
 	reloadSignals   []os.Signal
@@ -19,52 +29,60 @@ type Graceful struct {
 
 	signalChan chan os.Signal
 
+	signalHandler    SignalHandler
 	reloadHandlers   []func()
 	shutdownHandlers []func()
 }
 
-func New(reloadSignals []os.Signal, shutdownSignals []os.Signal, perHandlerTimeout time.Duration) *Graceful {
-	return &Graceful{
+func NewWithSignal(reloadSignals []os.Signal, shutdownSignals []os.Signal, perHandlerTimeout time.Duration) Graceful {
+	return New(reloadSignals, shutdownSignals, perHandlerTimeout, func(signalChan chan os.Signal, signals []os.Signal) {
+		signal.Notify(signalChan, signals...)
+	})
+}
+
+func New(reloadSignals []os.Signal, shutdownSignals []os.Signal, perHandlerTimeout time.Duration, signalHandler SignalHandler) Graceful {
+	return &gracefulImpl{
 		reloadSignals:     reloadSignals,
 		shutdownSignals:   shutdownSignals,
 		reloadHandlers:    make([]func(), 0),
 		shutdownHandlers:  make([]func(), 0),
 		perHandlerTimeout: perHandlerTimeout,
 		signalChan:        make(chan os.Signal),
+		signalHandler:     signalHandler,
 	}
 }
 
-func (gf *Graceful) AddReloadHandler(h func()) {
+func (gf *gracefulImpl) AddReloadHandler(h func()) {
 	gf.lock.Lock()
 	defer gf.lock.Unlock()
 
 	gf.reloadHandlers = append(gf.reloadHandlers, h)
 }
 
-func (gf *Graceful) AddShutdownHandler(h func()) {
+func (gf *gracefulImpl) AddShutdownHandler(h func()) {
 	gf.lock.Lock()
 	defer gf.lock.Unlock()
 
 	gf.shutdownHandlers = append(gf.shutdownHandlers, h)
 }
 
-func (gf *Graceful) Reload() {
+func (gf *gracefulImpl) Reload() {
 	log.Debug("execute reload...")
 	go gf.reload()
 }
 
-func (gf *Graceful) Shutdown() {
+func (gf *gracefulImpl) Shutdown() {
 	log.Debug("shutdown...")
 
-	_ = gf.SignalSelf(os.Interrupt)
+	_ = gf.signalSelf(os.Interrupt)
 }
 
-func (gf *Graceful) SignalSelf(sig os.Signal) error {
+func (gf *gracefulImpl) signalSelf(sig os.Signal) error {
 	gf.signalChan <- sig
 	return nil
 }
 
-func (gf *Graceful) shutdown() {
+func (gf *gracefulImpl) shutdown() {
 	gf.lock.Lock()
 	defer gf.lock.Unlock()
 
@@ -91,7 +109,7 @@ func (gf *Graceful) shutdown() {
 	}
 }
 
-func (gf *Graceful) reload() {
+func (gf *gracefulImpl) reload() {
 	gf.lock.Lock()
 	defer gf.lock.Unlock()
 
@@ -116,12 +134,12 @@ func (gf *Graceful) reload() {
 	}
 }
 
-func (gf *Graceful) Start() error {
+func (gf *gracefulImpl) Start() error {
 	signals := make([]os.Signal, 0)
 	signals = append(signals, gf.reloadSignals...)
 	signals = append(signals, gf.shutdownSignals...)
+	gf.signalHandler(gf.signalChan, signals)
 
-	signal.Notify(gf.signalChan, signals...)
 	for {
 		sig := <-gf.signalChan
 

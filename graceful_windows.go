@@ -7,6 +7,6 @@ import (
 	"time"
 )
 
-func NewWithDefault(perHandlerTimeout time.Duration) *Graceful {
-	return New([]os.Signal{}, []os.Signal{os.Interrupt}, perHandlerTimeout)
+func NewWithDefault(perHandlerTimeout time.Duration) Graceful {
+	return NewWithSignal([]os.Signal{}, []os.Signal{os.Interrupt}, perHandlerTimeout)
 }
