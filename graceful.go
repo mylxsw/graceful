@@ -89,13 +89,12 @@ func (gf *gracefulImpl) shutdown() {
 	ok := make(chan interface{}, 0)
 	defer close(ok)
 	for i := len(gf.shutdownHandlers) - 1; i >= 0; i-- {
-
 		go func(handler func()) {
 			defer func() {
 				if err := recover(); err != nil {
 					log.Errorf("execute shutdown handler failed: %s", err)
 				}
-				ok <- struct{}{}
+				safeSendChanel(ok, struct{}{})
 			}()
 
 			handler()
@@ -121,7 +120,7 @@ func (gf *gracefulImpl) reload() {
 				if err := recover(); err != nil {
 					log.Errorf("execute reload handler failed: %s", err)
 				}
-				ok <- struct{}{}
+				safeSendChanel(ok, struct{}{})
 			}()
 			handler()
 		}(gf.reloadHandlers[i])
@@ -164,4 +163,9 @@ FINAL:
 	gf.shutdown()
 
 	return nil
+}
+
+func safeSendChanel(c chan interface{}, data interface{}) {
+	defer func() { recover() }()
+	c <- data
 }
