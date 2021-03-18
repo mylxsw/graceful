@@ -9,5 +9,5 @@ import (
 )
 
 func NewWithDefault(perHandlerTimeout time.Duration) Graceful {
-	return NewWithSignal([]os.Signal{syscall.SIGUSR2}, []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP}, perHandlerTimeout)
+	return NewWithSignal([]os.Signal{syscall.SIGUSR2}, []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGQUIT}, perHandlerTimeout)
 }
